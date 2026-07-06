@@ -1,0 +1,23 @@
+{
+  "blinkit_location": {
+    "lat": "28.6139",
+    "lon": "77.2090"
+  },
+  "products": [
+    {
+      "name": "PS5 Digital AMZN",
+      "url": "https://amzn.in/d/06h51iYM",
+      "target_price": null
+    },
+    {
+      "name": "PS5 Digital FlipKart",
+      "url": "https://dl.flipkart.com/dl/sony-ps5-digital-cfi-2116b01y-825-gb/p/itm7124b7348127b?pid=GMCHN3VPFGG9NWCB&lid=LSTGMCHN3VPFGG9NWCBMIQFYQ&marketplace=FLIPKART&q=playstation+5&store=4rr/x1m/ogz&srno=s_1_6&otracker=AS_QueryStore_OrganicAutoSuggest_2_11_na_na_na&otracker1=AS_QueryStore_OrganicAutoSuggest_2_11_na_na_na&fm=organic&iid=661a8748-42db-4926-9b01-fdf14e796eb1.GMCHN3VPFGG9NWCB.SEARCH&ppt=None&ppn=None&ssid=usszo6mx000000001783350362448&qH=bf6b5623d2e2dc39&ov_redirect=true&ov_redirect=true&_refId=&_appId=CL",
+      "target_price": 55000
+    },
+    {
+      "name": "Example - Vicks Lozenges (Blinkit)",
+      "url": "https://blinkit.com/prn/vicks-orange-menthol-medicated-throat-lozenges/prid/721400",
+      "target_price": null
+    }
+  ]
+}
