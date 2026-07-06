@@ -283,6 +283,7 @@ def main():
         prev = state.get(url, {})
         prev_status = prev.get("status")
         prev_price = prev.get("price")
+        prev_pending = prev.get("pending_price")
         prev_price_alerted = prev.get("price_alerted", False)
 
         if status in (BLOCKED, ERROR):
@@ -299,14 +300,23 @@ def main():
             )
 
         # Listing changed: price moved up or down (reviews/ratings are
-        # never tracked, so they can't trigger anything)
-        elif prev_status is not None and price and prev_price and price != prev_price:
-            direction = "📉 dropped" if price < prev_price else "📈 increased"
-            notify(
-                f"✏️ LISTING CHANGED\n{name}\n"
-                f"Price {direction}: ₹{prev_price:,.0f} → {price_str}",
-                order_url=url,
-            )
+        # never tracked, so they can't trigger anything). A new price must
+        # be seen on two consecutive cycles before alerting, so a one-off
+        # misread page never sends a false alert.
+        pending_price = None
+        stored_price = price
+        if prev_status is not None and price and prev_price and price != prev_price:
+            if prev_pending == price:
+                direction = "📉 dropped" if price < prev_price else "📈 increased"
+                notify(
+                    f"✏️ LISTING CHANGED\n{name}\n"
+                    f"Price {direction}: ₹{prev_price:,.0f} → {price_str}",
+                    order_url=url,
+                )
+            else:
+                print(f"  price changed (₹{prev_price:,.0f} → {price_str}), waiting for confirmation next cycle")
+                pending_price = price
+                stored_price = prev_price  # keep old price until confirmed
 
         # Optional price target (only alert once until it rises back above)
         price_alerted = prev_price_alerted
@@ -321,7 +331,12 @@ def main():
             elif price > target:
                 price_alerted = False
 
-        state[url] = {"status": status, "price": price, "price_alerted": price_alerted}
+        state[url] = {
+            "status": status,
+            "price": stored_price,
+            "pending_price": pending_price,
+            "price_alerted": price_alerted,
+        }
         time.sleep(3)  # be polite between requests
 
     STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
