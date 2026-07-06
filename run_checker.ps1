@@ -8,8 +8,9 @@ if ((Test-Path $log) -and ((Get-Item $log).Length -gt 5MB)) {
     Remove-Item $log -Force
 }
 
-"=== Checker starting at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $log -Append -Encoding utf8
+[System.IO.File]::AppendAllText($log, "=== Checker starting at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===`r`n")
 
-# -X utf8 so rupee symbols print fine; -u so every line is written to the
-# log immediately instead of sitting in Python's output buffer
-python -X utf8 -u checker.py --loop 120 --stock-only *>> $log
+# cmd handles the redirect so python's UTF-8 output lands in the file
+# byte-for-byte (PowerShell's own >> would re-encode it as UTF-16 and
+# corrupt the log). -u = unbuffered, -X utf8 = rupee signs print fine.
+cmd /c "python -X utf8 -u checker.py --loop 120 --stock-only >> checker.log 2>&1"
