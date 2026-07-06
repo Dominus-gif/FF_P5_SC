@@ -1,17 +1,12 @@
 {
-  "https://www.amazon.in/dp/B0H3LKPC2K": {
-    "status": "IN_STOCK",
-    "price": 21999.0,
-    "price_alerted": false
-  },
-  "https://www.flipkart.com/apple-iphone-15-black-128-gb/p/itmbf14ef54f645d": {
+  "https://amzn.in/d/06h51iYM": {
     "status": "OUT_OF_STOCK",
-    "price": 59900.0,
+    "price": 54990.0,
     "price_alerted": false
   },
-  "https://blinkit.com/prn/vicks-orange-menthol-medicated-throat-lozenges/prid/721400": {
-    "status": "IN_STOCK",
-    "price": 60.0,
+  "https://dl.flipkart.com/dl/sony-ps5-digital-cfi-2116b01y-825-gb/p/itm7124b7348127b?pid=GMCHN3VPFGG9NWCB&lid=LSTGMCHN3VPFGG9NWCBMIQFYQ&marketplace=FLIPKART&q=playstation+5&store=4rr/x1m/ogz&srno=s_1_6&otracker=AS_QueryStore_OrganicAutoSuggest_2_11_na_na_na&otracker1=AS_QueryStore_OrganicAutoSuggest_2_11_na_na_na&fm=organic&iid=661a8748-42db-4926-9b01-fdf14e796eb1.GMCHN3VPFGG9NWCB.SEARCH&ppt=None&ppn=None&ssid=usszo6mx000000001783350362448&qH=bf6b5623d2e2dc39&ov_redirect=true&ov_redirect=true&_refId=&_appId=CL": {
+    "status": "OUT_OF_STOCK",
+    "price": 49990.0,
     "price_alerted": false
   }
 }

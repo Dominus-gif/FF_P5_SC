@@ -1,7 +1,7 @@
 """
-Stock & price checker for amazon.in, flipkart.com, blinkit.com.
+Stock & price checker for amazon.in and flipkart.com.
 Sends a Telegram message (and optionally email) when an item comes
-back in stock or drops below your target price.
+back in stock, its price changes, or it drops below a target price.
 
 Products are configured in products.json. Last-known state is kept in
 state.json so you are only notified on a change, not every run.
@@ -146,53 +146,6 @@ def check_flipkart(html):
     return ERROR, price
 
 
-def check_blinkit(url, lat, lon):
-    """Blinkit stock is per dark store, so we call the same JSON API the
-    website uses, passing your location as lat/lon headers. The response
-    also contains recommended products, so match on the product id."""
-    m = re.search(r"/prid/(\d+)", url)
-    if not m:
-        print("  blinkit url must contain /prid/<id>")
-        return ERROR, None
-    prid = m.group(1)
-
-    headers = dict(HEADERS, Accept="application/json", lat=str(lat), lon=str(lon))
-    try:
-        resp = requests.post(
-            f"https://blinkit.com/v1/layout/product/{prid}",
-            headers=headers, timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except (requests.RequestException, ValueError) as exc:
-        print(f"  blinkit api error: {exc}")
-        return BLOCKED, None
-
-    matches = []
-
-    def walk(node):
-        if isinstance(node, dict):
-            if str(node.get("product_id")) == prid and "inventory" in node:
-                matches.append(node)
-            for v in node.values():
-                walk(v)
-        elif isinstance(node, list):
-            for v in node:
-                walk(v)
-
-    walk(data)
-    if not matches:
-        return ERROR, None
-
-    # Prefer an entry with a numeric price; inventory > 0 means in stock.
-    best = max(matches, key=lambda n: isinstance(n.get("price"), (int, float)))
-    price = best.get("price") or None
-    inventory = best.get("inventory") or 0
-    return (IN_STOCK if inventory > 0 else OUT_OF_STOCK), (
-        float(price) if price else None
-    )
-
-
 MOBILE_HEADERS = dict(
     HEADERS,
     **{
@@ -204,39 +157,47 @@ MOBILE_HEADERS = dict(
 )
 
 
-def check_product(product, location):
+def check_product(product):
     url = product["url"]
-    if "amazon." in url:
+    if "amazon." in url or "amzn.in" in url or "amzn.to" in url:
         html = fetch(url)
         return check_amazon(html) if html else (BLOCKED, None)
     if "flipkart.com" in url:
         # Flipkart only server-renders product data for mobile browsers
         html = fetch(url, headers=MOBILE_HEADERS)
         return check_flipkart(html) if html else (BLOCKED, None)
-    if "blinkit.com" in url:
-        lat = location.get("lat") or "28.6139"
-        lon = location.get("lon") or "77.2090"
-        return check_blinkit(url, lat, lon)
     print(f"  unsupported site: {url}")
     return ERROR, None
 
 
 # ---------------------------------------------------------------- notify
 
-def send_telegram(message):
+def send_telegram(message, order_url=None):
+    """TELEGRAM_CHAT_ID may hold several ids separated by commas,
+    e.g. "7537197073,1234567890" — everyone gets the alert.
+    If order_url is given, the message carries a "Place Order Now" button
+    (product links open directly in the Amazon/Flipkart app on phones)."""
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
+    chat_ids = os.environ.get("TELEGRAM_CHAT_ID", "")
+    if not token or not chat_ids:
         print("  (telegram not configured, skipping)")
         return False
-    resp = requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        data={"chat_id": chat_id, "text": message, "disable_web_page_preview": True},
-        timeout=30,
-    )
-    ok = resp.ok and resp.json().get("ok")
-    print(f"  telegram: {'sent' if ok else 'FAILED ' + resp.text[:200]}")
-    return ok
+    payload = {"text": message, "disable_web_page_preview": True}
+    if order_url:
+        payload["reply_markup"] = json.dumps(
+            {"inline_keyboard": [[{"text": "🛒 Place Order Now", "url": order_url}]]}
+        )
+    any_sent = False
+    for chat_id in [c.strip() for c in chat_ids.split(",") if c.strip()]:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            data=dict(payload, chat_id=chat_id),
+            timeout=30,
+        )
+        ok = resp.ok and resp.json().get("ok")
+        print(f"  telegram -> {chat_id}: {'sent' if ok else 'FAILED ' + resp.text[:200]}")
+        any_sent = any_sent or ok
+    return any_sent
 
 
 def send_email(subject, body):
@@ -260,8 +221,8 @@ def send_email(subject, body):
         return False
 
 
-def notify(message):
-    sent = send_telegram(message)
+def notify(message, order_url=None):
+    sent = send_telegram(message, order_url=order_url)
     sent = send_email("Stock Alert", message) or sent
     return sent
 
@@ -269,26 +230,25 @@ def notify(message):
 # ---------------------------------------------------------------- main
 
 def main():
-    config = json.loads(PRODUCTS_FILE.read_text(encoding="utf-8"))
+    config = json.loads(PRODUCTS_FILE.read_text(encoding="utf-8-sig"))
     products = config["products"]
-
-    location = config.get("blinkit_location", {})
 
     state = {}
     if STATE_FILE.exists():
-        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        state = json.loads(STATE_FILE.read_text(encoding="utf-8-sig"))
 
     for product in products:
         name, url = product["name"], product["url"]
         target = product.get("target_price")
         print(f"Checking: {name}")
 
-        status, price = check_product(product, location)
+        status, price = check_product(product)
         price_str = f"₹{price:,.0f}" if price else "price unknown"
         print(f"  -> {status}, {price_str}")
 
         prev = state.get(url, {})
         prev_status = prev.get("status")
+        prev_price = prev.get("price")
         prev_price_alerted = prev.get("price_alerted", False)
 
         if status in (BLOCKED, ERROR):
@@ -296,17 +256,32 @@ def main():
             time.sleep(3)
             continue
 
-        # Back in stock (was out / unknown before)
+        # Back in stock (was out / unknown before) — the big one
         if status == IN_STOCK and prev_status != IN_STOCK:
-            notify(f"🟢 BACK IN STOCK\n{name}\n{price_str}\n{url}")
+            notify(
+                f"🟢🟢 BACK IN STOCK 🟢🟢\n\n{name}\n{price_str}\n\n"
+                f"GO GO GO — tap the button below!",
+                order_url=url,
+            )
 
-        # Price target hit (only alert once until it goes back above target)
+        # Listing changed: price moved up or down (reviews/ratings are
+        # never tracked, so they can't trigger anything)
+        elif prev_status is not None and price and prev_price and price != prev_price:
+            direction = "📉 dropped" if price < prev_price else "📈 increased"
+            notify(
+                f"✏️ LISTING CHANGED\n{name}\n"
+                f"Price {direction}: ₹{prev_price:,.0f} → {price_str}",
+                order_url=url,
+            )
+
+        # Optional price target (only alert once until it rises back above)
         price_alerted = prev_price_alerted
         if target and price is not None:
             if price <= target and not prev_price_alerted:
                 notify(
-                    f"🔔 PRICE ALERT\n{name}\nNow {price_str} "
-                    f"(target ₹{target:,.0f})\n{url}"
+                    f"🔔 PRICE TARGET HIT\n{name}\nNow {price_str} "
+                    f"(target ₹{target:,.0f})",
+                    order_url=url,
                 )
                 price_alerted = True
             elif price > target:
@@ -320,4 +295,17 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    if "--loop" in sys.argv:
+        # Run forever, checking every 5 minutes (for phone/PC hosting).
+        # Override with e.g. --loop 120 for every 2 minutes.
+        args = [a for a in sys.argv[1:] if a != "--loop"]
+        interval = int(args[0]) if args and args[0].isdigit() else 300
+        print(f"Loop mode: checking every {interval}s. Ctrl+C to stop.")
+        while True:
+            try:
+                main()
+            except Exception as exc:
+                print(f"run failed: {exc}")
+            time.sleep(interval)
+    else:
+        sys.exit(main())
