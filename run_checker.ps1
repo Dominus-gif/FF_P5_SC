@@ -10,5 +10,6 @@ if ((Test-Path $log) -and ((Get-Item $log).Length -gt 5MB)) {
 
 "=== Checker starting at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" | Out-File $log -Append -Encoding utf8
 
-# -X utf8 so rupee symbols print fine; output appended to checker.log
-python -X utf8 checker.py --loop 120 --stock-only *>> $log
+# -X utf8 so rupee symbols print fine; -u so every line is written to the
+# log immediately instead of sitting in Python's output buffer
+python -X utf8 -u checker.py --loop 120 --stock-only *>> $log
