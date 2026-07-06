@@ -24,6 +24,16 @@ BASE = Path(__file__).parent
 PRODUCTS_FILE = BASE / "products.json"
 STATE_FILE = BASE / "state.json"
 
+# Load credentials from a local .env file (gitignored) so they don't have
+# to be exported on every shell session. Real env vars take precedence.
+ENV_FILE = BASE / ".env"
+if ENV_FILE.exists():
+    for _line in ENV_FILE.read_text(encoding="utf-8-sig").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
