@@ -43,6 +43,10 @@ HEADERS = {
     "Cache-Control": "max-age=0",
 }
 
+# --stock-only on the command line: alert only on stock changes,
+# ignore price movements entirely
+STOCK_ONLY = "--stock-only" in sys.argv
+
 IN_STOCK = "IN_STOCK"
 OUT_OF_STOCK = "OUT_OF_STOCK"
 BLOCKED = "BLOCKED"
@@ -305,7 +309,11 @@ def main():
         # misread page never sends a false alert.
         pending_price = None
         stored_price = price
-        if prev_status is not None and price and prev_price and price != prev_price:
+        if (
+            not STOCK_ONLY
+            and prev_status is not None
+            and price and prev_price and price != prev_price
+        ):
             if prev_pending == price:
                 direction = "📉 dropped" if price < prev_price else "📈 increased"
                 notify(
@@ -320,7 +328,7 @@ def main():
 
         # Optional price target (only alert once until it rises back above)
         price_alerted = prev_price_alerted
-        if target and price is not None:
+        if not STOCK_ONLY and target and price is not None:
             if price <= target and not prev_price_alerted:
                 notify(
                     f"🔔 PRICE TARGET HIT\n{name}\nNow {price_str} "
@@ -347,9 +355,10 @@ if __name__ == "__main__":
     if "--loop" in sys.argv:
         # Run forever, checking every 5 minutes (for phone/PC hosting).
         # Override with e.g. --loop 120 for every 2 minutes.
-        args = [a for a in sys.argv[1:] if a != "--loop"]
+        args = [a for a in sys.argv[1:] if a not in ("--loop", "--stock-only")]
         interval = int(args[0]) if args and args[0].isdigit() else 300
-        print(f"Loop mode: checking every {interval}s. Ctrl+C to stop.")
+        mode = "stock alerts only" if STOCK_ONLY else "stock + price alerts"
+        print(f"Loop mode: checking every {interval}s ({mode}). Ctrl+C to stop.")
         cycle = 0
         while True:
             cycle += 1
