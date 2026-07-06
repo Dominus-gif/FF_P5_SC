@@ -13,6 +13,7 @@ import re
 import smtplib
 import sys
 import time
+from datetime import datetime
 from email.mime.text import MIMEText
 from pathlib import Path
 
@@ -32,6 +33,14 @@ HEADERS = {
     "Accept-Language": "en-IN,en;q=0.9",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "Cache-Control": "max-age=0",
 }
 
 IN_STOCK = "IN_STOCK"
@@ -42,23 +51,49 @@ ERROR = "ERROR"
 
 # ---------------------------------------------------------------- fetching
 
-def fetch(url, headers=None):
+def fetch(url, headers=None, attempts=3):
     """Return page HTML, or None if blocked/unreachable."""
-    for attempt in range(2):
+    for attempt in range(attempts):
         try:
             resp = requests.get(url, headers=headers or HEADERS, timeout=30)
             if resp.status_code in (403, 429, 503):
-                if attempt == 0:
-                    time.sleep(5)
+                print(f"  got HTTP {resp.status_code} (attempt {attempt + 1}/{attempts})")
+                if attempt < attempts - 1:
+                    time.sleep(5 + attempt * 5)
                     continue
                 return None
             resp.raise_for_status()
             return resp.text
         except requests.RequestException as exc:
             print(f"  fetch error: {exc}")
-            if attempt == 0:
+            if attempt < attempts - 1:
                 time.sleep(5)
     return None
+
+
+def check_amazon_url(url):
+    """Amazon is picky about datacenter and mobile-carrier IPs. Resolve
+    short links to the real /dp/ URL, try with desktop headers, then fall
+    back to a mobile browser identity if blocked."""
+    # amzn.in short links redirect to the full product page; resolving
+    # them first avoids an extra hop on every retry
+    if "amzn.in" in url or "amzn.to" in url:
+        try:
+            resp = requests.head(url, headers=HEADERS, timeout=30, allow_redirects=True)
+            if "/dp/" in resp.url:
+                url = resp.url.split("?")[0]
+                print(f"  resolved to {url}")
+        except requests.RequestException:
+            pass
+
+    html = fetch(url)
+    if html:
+        status, price = check_amazon(html)
+        if status != BLOCKED:
+            return status, price
+        print("  captcha with desktop headers, retrying as mobile browser...")
+    html = fetch(url, headers=MOBILE_HEADERS, attempts=2)
+    return check_amazon(html) if html else (BLOCKED, None)
 
 
 # ---------------------------------------------------------------- parsing
@@ -160,8 +195,7 @@ MOBILE_HEADERS = dict(
 def check_product(product):
     url = product["url"]
     if "amazon." in url or "amzn.in" in url or "amzn.to" in url:
-        html = fetch(url)
-        return check_amazon(html) if html else (BLOCKED, None)
+        return check_amazon_url(url)
     if "flipkart.com" in url:
         # Flipkart only server-renders product data for mobile browsers
         html = fetch(url, headers=MOBILE_HEADERS)
@@ -291,7 +325,7 @@ def main():
         time.sleep(3)  # be polite between requests
 
     STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    print("Done.")
+    print(f"Cycle done at {datetime.now():%Y-%m-%d %H:%M:%S}")
 
 
 if __name__ == "__main__":
@@ -301,11 +335,15 @@ if __name__ == "__main__":
         args = [a for a in sys.argv[1:] if a != "--loop"]
         interval = int(args[0]) if args and args[0].isdigit() else 300
         print(f"Loop mode: checking every {interval}s. Ctrl+C to stop.")
+        cycle = 0
         while True:
+            cycle += 1
+            print(f"\n=== Cycle {cycle} started at {datetime.now():%Y-%m-%d %H:%M:%S} ===")
             try:
                 main()
             except Exception as exc:
                 print(f"run failed: {exc}")
+            print(f"Next check at {datetime.fromtimestamp(time.time() + interval):%H:%M:%S}")
             time.sleep(interval)
     else:
         sys.exit(main())
