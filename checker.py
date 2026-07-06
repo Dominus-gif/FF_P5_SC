@@ -133,12 +133,15 @@ def check_amazon(html):
         return BLOCKED, None
     soup = BeautifulSoup(html, "html.parser")
 
+    # Only read the price from the main buy-box areas — generic price spans
+    # can belong to unrelated widgets (accessories, bundles) and would
+    # report a wrong price when the main listing has none.
     price = None
     for selector in (
         "#corePriceDisplay_desktop_feature_div span.a-price-whole",
         "#corePrice_feature_div span.a-offscreen",
-        "span.a-price span.a-offscreen",
-        "span.a-price-whole",
+        "#corePriceDisplay_mobile_feature_div span.a-price-whole",
+        "#apex_desktop span.a-price span.a-offscreen",
     ):
         for el in soup.select(selector):
             price = parse_price(el.get_text())
@@ -194,6 +197,121 @@ MOBILE_HEADERS = dict(
         )
     },
 )
+
+
+# ------------------------------------------------------- search monitoring
+
+def amazon_search_results(url):
+    """Yield (item_id, title, price, link) for every result on an Amazon
+    search page."""
+    # Amazon sometimes serves a JS-only page variant with no results in
+    # the HTML, and it can stick briefly for one browser fingerprint —
+    # alternate desktop/mobile identities until we get the rendered one
+    for attempt, hdrs in enumerate((HEADERS, MOBILE_HEADERS, HEADERS)):
+        html = fetch(url, headers=hdrs)
+        if html is None:
+            return None
+        soup = BeautifulSoup(html, "html.parser")
+        results = []
+        for div in soup.select('div[data-asin][data-component-type="s-search-result"]'):
+            asin = div.get("data-asin", "").strip()
+            if not asin:
+                continue
+            title_el = div.select_one("h2")
+            title = title_el.get_text(" ", strip=True) if title_el else ""
+            price_el = div.select_one("span.a-price span.a-offscreen")
+            price = parse_price(price_el.get_text()) if price_el else None
+            results.append((asin, title, price, f"https://www.amazon.in/dp/{asin}"))
+        if results:
+            return results
+        time.sleep(3)
+    return results
+
+
+def flipkart_search_results(url):
+    """Yield (item_id, title, price, link) from a Flipkart search page.
+    Titles come from the URL slugs; prices are matched from nearby text."""
+    html = fetch(url, headers=MOBILE_HEADERS)
+    if html is None:
+        return None
+    results = []
+    seen = set()
+    for m in re.finditer(r'href="(/([^"?]*?)/p/(itm\w+))[^"]*"', html):
+        path, slug, pid = m.group(1), m.group(2), m.group(3)
+        if pid in seen:
+            continue
+        seen.add(pid)
+        title = slug.replace("-", " ")
+        # look for a price shortly after the link in the HTML
+        window = html[m.end() : m.end() + 3000]
+        pm = re.search(r"₹\s*([\d,]+)", window)
+        price = parse_price(pm.group(1)) if pm else None
+        results.append((pid, title, price, f"https://www.flipkart.com{path}"))
+    return results
+
+
+def run_searches(searches, state):
+    """Alert when a NEW listing matching the keywords appears in search
+    results — catches resellers posting the product under a fresh listing
+    that our watched URLs would miss."""
+    for search in searches:
+        name = search["name"]
+        url = search["url"]
+        must = [w.lower() for w in search.get("must_include", [])]
+        any_of = [w.lower() for w in search.get("any_include", [])]
+        exclude = [w.lower() for w in search.get("exclude", [])]
+        min_price = search.get("min_price")
+        max_price = search.get("max_price")
+        print(f"Searching: {name}")
+
+        if "amazon." in url:
+            results = amazon_search_results(url)
+        elif "flipkart.com" in url:
+            results = flipkart_search_results(url)
+        else:
+            print("  unsupported search site")
+            continue
+        if results is None:
+            print("  search page blocked, skipping")
+            continue
+
+        matching = {}
+        for item_id, title, price, link in results:
+            low = title.lower()
+            if not all(w in low for w in must):
+                continue
+            if any_of and not any(w in low for w in any_of):
+                continue
+            if any(w in low for w in exclude):
+                continue
+            if price is not None:
+                if min_price and price < min_price:
+                    continue
+                if max_price and price > max_price:
+                    continue
+            matching[item_id] = (title, price, link)
+
+        key = f"search::{name}"
+        prev_seen = state.get(key, {}).get("seen")
+        print(f"  {len(results)} results, {len(matching)} match")
+
+        if prev_seen is None:
+            # First run: record what exists today without alerting
+            state[key] = {"seen": sorted(matching)}
+            time.sleep(3)
+            continue
+
+        new_ids = [i for i in matching if i not in prev_seen]
+        for item_id in new_ids[:5]:
+            title, price, link = matching[item_id]
+            price_str = f"₹{price:,.0f}" if price else "price unknown"
+            notify(
+                f"🆕 NEW LISTING FOUND\n{title[:120]}\n{price_str}\n"
+                f"Found via search: {name}",
+                order_url=link,
+            )
+        state[key] = {"seen": sorted(set(prev_seen) | set(matching))}
+        time.sleep(3)
 
 
 def check_product(product):
@@ -346,6 +464,8 @@ def main():
             "price_alerted": price_alerted,
         }
         time.sleep(3)  # be polite between requests
+
+    run_searches(config.get("searches", []), state)
 
     STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
     print(f"Cycle done at {datetime.now():%Y-%m-%d %H:%M:%S}")

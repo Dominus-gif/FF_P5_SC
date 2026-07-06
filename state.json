@@ -1,7 +1,7 @@
 {
   "https://amzn.in/d/06h51iYM": {
     "status": "OUT_OF_STOCK",
-    "price": 54900.0,
+    "price": null,
     "pending_price": null,
     "price_alerted": false
   },
@@ -9,5 +9,19 @@
     "status": "OUT_OF_STOCK",
     "price": 49990.0,
     "price_alerted": false
+  },
+  "https://amzn.in/d/09IK2SXm": {
+    "status": "OUT_OF_STOCK",
+    "price": null,
+    "pending_price": null,
+    "price_alerted": false
+  },
+  "search::PS5 Digital search (Amazon)": {
+    "seen": []
+  },
+  "search::PS5 Digital search (Flipkart)": {
+    "seen": [
+      "itm7124b7348127b"
+    ]
   }
 }
