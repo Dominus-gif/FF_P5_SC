@@ -1,7 +1,9 @@
 """
-Stock & price checker for amazon.in and flipkart.com.
-Sends a Telegram message (and optionally email) when an item comes
-back in stock, its price changes, or it drops below a target price.
+Stock checker for amazon.in and flipkart.com.
+Sends a Telegram message (and optionally email) ONLY when an item
+becomes orderable: a watched listing comes back in stock, or a new
+orderable listing matching the search keywords appears.
+Price changes are tracked in state.json but never notified.
 
 Products are configured in products.json. Last-known state is kept in
 state.json so you are only notified on a change, not every run.
@@ -52,10 +54,6 @@ HEADERS = {
     "sec-ch-ua-platform": '"Windows"',
     "Cache-Control": "max-age=0",
 }
-
-# --stock-only on the command line: alert only on stock changes,
-# ignore price movements entirely
-STOCK_ONLY = "--stock-only" in sys.argv
 
 IN_STOCK = "IN_STOCK"
 OUT_OF_STOCK = "OUT_OF_STOCK"
@@ -294,11 +292,15 @@ def run_searches(searches, state):
                 continue
             if any(w in low for w in exclude):
                 continue
-            if price is not None:
-                if min_price and price < min_price:
-                    continue
-                if max_price and price > max_price:
-                    continue
+            # No price shown = not orderable right now. Skip it WITHOUT
+            # remembering it, so the moment it gains a price it counts as
+            # new and triggers an alert.
+            if price is None:
+                continue
+            if min_price and price < min_price:
+                continue
+            if max_price and price > max_price:
+                continue
             matching[item_id] = (title, price, link)
 
         key = f"search::{name}"
@@ -314,9 +316,8 @@ def run_searches(searches, state):
         new_ids = [i for i in matching if i not in prev_seen]
         for item_id in new_ids[:5]:
             title, price, link = matching[item_id]
-            price_str = f"₹{price:,.0f}" if price else "price unknown"
             notify(
-                f"🆕 NEW LISTING FOUND\n{title[:120]}\n{price_str}\n"
+                f"🆕 NEW ORDERABLE LISTING\n{title[:120]}\n₹{price:,.0f}\n"
                 f"Found via search: {name}",
                 order_url=link,
             )
@@ -405,25 +406,21 @@ def main():
 
     for product in products:
         name, url = product["name"], product["url"]
-        target = product.get("target_price")
         print(f"Checking: {name}")
 
         status, price = check_product(product)
         price_str = f"₹{price:,.0f}" if price else "price unknown"
         print(f"  -> {status}, {price_str}")
 
-        prev = state.get(url, {})
-        prev_status = prev.get("status")
-        prev_price = prev.get("price")
-        prev_pending = prev.get("pending_price")
-        prev_price_alerted = prev.get("price_alerted", False)
+        prev_status = state.get(url, {}).get("status")
 
         if status in (BLOCKED, ERROR):
             # Don't overwrite known state on a failed run; just skip.
             time.sleep(3)
             continue
 
-        # Back in stock (was out / unknown before) — the big one
+        # The only product alert: item became orderable (was out / unknown).
+        # Price changes are tracked in state for reference but never notified.
         if status == IN_STOCK and prev_status != IN_STOCK:
             notify(
                 f"🟢🟢 BACK IN STOCK 🟢🟢\n\n{name}\n{price_str}\n\n"
@@ -431,48 +428,7 @@ def main():
                 order_url=url,
             )
 
-        # Listing changed: price moved up or down (reviews/ratings are
-        # never tracked, so they can't trigger anything). A new price must
-        # be seen on two consecutive cycles before alerting, so a one-off
-        # misread page never sends a false alert.
-        pending_price = None
-        stored_price = price
-        if (
-            not STOCK_ONLY
-            and prev_status is not None
-            and price and prev_price and price != prev_price
-        ):
-            if prev_pending == price:
-                direction = "📉 dropped" if price < prev_price else "📈 increased"
-                notify(
-                    f"✏️ LISTING CHANGED\n{name}\n"
-                    f"Price {direction}: ₹{prev_price:,.0f} → {price_str}",
-                    order_url=url,
-                )
-            else:
-                print(f"  price changed (₹{prev_price:,.0f} → {price_str}), waiting for confirmation next cycle")
-                pending_price = price
-                stored_price = prev_price  # keep old price until confirmed
-
-        # Optional price target (only alert once until it rises back above)
-        price_alerted = prev_price_alerted
-        if not STOCK_ONLY and target and price is not None:
-            if price <= target and not prev_price_alerted:
-                notify(
-                    f"🔔 PRICE TARGET HIT\n{name}\nNow {price_str} "
-                    f"(target ₹{target:,.0f})",
-                    order_url=url,
-                )
-                price_alerted = True
-            elif price > target:
-                price_alerted = False
-
-        state[url] = {
-            "status": status,
-            "price": stored_price,
-            "pending_price": pending_price,
-            "price_alerted": price_alerted,
-        }
+        state[url] = {"status": status, "price": price}
         time.sleep(3)  # be polite between requests
 
     run_searches(config.get("searches", []), state)
@@ -485,10 +441,11 @@ if __name__ == "__main__":
     if "--loop" in sys.argv:
         # Run forever, checking every 5 minutes (for phone/PC hosting).
         # Override with e.g. --loop 120 for every 2 minutes.
+        # --stock-only is accepted for backwards compatibility (it is now
+        # always the behaviour: only in-stock alerts, never price alerts)
         args = [a for a in sys.argv[1:] if a not in ("--loop", "--stock-only")]
         interval = int(args[0]) if args and args[0].isdigit() else 300
-        mode = "stock alerts only" if STOCK_ONLY else "stock + price alerts"
-        print(f"Loop mode: checking every {interval}s ({mode}). Ctrl+C to stop.")
+        print(f"Loop mode: checking every {interval}s (in-stock alerts only). Ctrl+C to stop.")
         cycle = 0
         while True:
             cycle += 1
