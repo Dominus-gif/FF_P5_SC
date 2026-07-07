@@ -494,12 +494,12 @@ if __name__ == "__main__":
         test_url(sys.argv[-1])
         sys.exit(0)
     if "--loop" in sys.argv:
-        # Run forever, checking every 5 minutes (for phone/PC hosting).
+        # Run forever, checking every 3 minutes (for phone/PC hosting).
         # Override with e.g. --loop 120 for every 2 minutes.
         # --stock-only is accepted for backwards compatibility (it is now
         # always the behaviour: only in-stock alerts, never price alerts)
         args = [a for a in sys.argv[1:] if a not in ("--loop", "--stock-only")]
-        interval = int(args[0]) if args and args[0].isdigit() else 300
+        interval = int(args[0]) if args and args[0].isdigit() else 180
         print(f"Loop mode: checking every {interval}s (in-stock alerts only). Ctrl+C to stop.")
         cycle = 0
         while True:
