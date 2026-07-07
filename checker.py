@@ -405,36 +405,44 @@ def main():
         state = json.loads(STATE_FILE.read_text(encoding="utf-8-sig"))
 
     for product in products:
-        name, url = product["name"], product["url"]
-        print(f"Checking: {name}")
-
-        status, price = check_product(product)
-        price_str = f"₹{price:,.0f}" if price else "price unknown"
-        print(f"  -> {status}, {price_str}")
-
-        prev_status = state.get(url, {}).get("status")
-
-        if status in (BLOCKED, ERROR):
-            # Don't overwrite known state on a failed run; just skip.
-            time.sleep(3)
-            continue
-
-        # The only product alert: item became orderable (was out / unknown).
-        # Price changes are tracked in state for reference but never notified.
-        if status == IN_STOCK and prev_status != IN_STOCK:
-            notify(
-                f"🟢🟢 BACK IN STOCK 🟢🟢\n\n{name}\n{price_str}\n\n"
-                f"GO GO GO — tap the button below!",
-                order_url=url,
-            )
-
-        state[url] = {"status": status, "price": price}
-        time.sleep(3)  # be polite between requests
+        name = product["name"]
+        # A product may watch one "url" or a list of "urls" — useful for
+        # covering several listings of the same item under one alert name.
+        urls = product.get("urls") or [product["url"]]
+        for i, url in enumerate(urls, 1):
+            label = name if len(urls) == 1 else f"{name} [link {i}/{len(urls)}]"
+            check_one(label, url, state)
 
     run_searches(config.get("searches", []), state)
 
     STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
     print(f"Cycle done at {datetime.now():%Y-%m-%d %H:%M:%S}")
+
+
+def check_one(name, url, state):
+    print(f"Checking: {name}")
+    status, price = check_product({"url": url})
+    price_str = f"₹{price:,.0f}" if price else "price unknown"
+    print(f"  -> {status}, {price_str}")
+
+    prev_status = state.get(url, {}).get("status")
+
+    if status in (BLOCKED, ERROR):
+        # Don't overwrite known state on a failed run; just skip.
+        time.sleep(3)
+        return
+
+    # The only product alert: item became orderable (was out / unknown).
+    # Price changes are tracked in state for reference but never notified.
+    if status == IN_STOCK and prev_status != IN_STOCK:
+        notify(
+            f"🟢🟢 BACK IN STOCK 🟢🟢\n\n{name}\n{price_str}\n\n"
+            f"GO GO GO — tap the button below!",
+            order_url=url,
+        )
+
+    state[url] = {"status": status, "price": price}
+    time.sleep(3)  # be polite between requests
 
 
 if __name__ == "__main__":

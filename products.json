@@ -2,18 +2,21 @@
   "products": [
     {
       "name": "PS5 Digital AMZN",
-      "url": "https://amzn.in/d/06h51iYM",
-      "target_price": null
+      "url": "https://amzn.in/d/06h51iYM"
     },
     {
       "name": "PS5 Digital Slim AMZN 2",
-      "url": "https://amzn.in/d/09IK2SXm",
-      "target_price": null
+      "url": "https://amzn.in/d/09IK2SXm"
     },
     {
       "name": "PS5 Digital FlipKart",
-      "url": "https://dl.flipkart.com/dl/sony-ps5-digital-cfi-2116b01y-825-gb/p/itm7124b7348127b?pid=GMCHN3VPFGG9NWCB&lid=LSTGMCHN3VPFGG9NWCBMIQFYQ&marketplace=FLIPKART&q=playstation+5&store=4rr/x1m/ogz&srno=s_1_6&otracker=AS_QueryStore_OrganicAutoSuggest_2_11_na_na_na&otracker1=AS_QueryStore_OrganicAutoSuggest_2_11_na_na_na&fm=organic&iid=661a8748-42db-4926-9b01-fdf14e796eb1.GMCHN3VPFGG9NWCB.SEARCH&ppt=None&ppn=None&ssid=usszo6mx000000001783350362448&qH=bf6b5623d2e2dc39&ov_redirect=true&ov_redirect=true&_refId=&_appId=CL",
-      "target_price": null
+      "urls": [
+        "https://dl.flipkart.com/dl/sony-ps5-digital-cfi-2116b01y-825-gb/p/itm7124b7348127b?pid=GMCHN3VPFGG9NWCB&lid=LSTGMCHN3VPFGG9NWCBMIQFYQ&marketplace=FLIPKART&q=playstation+5&store=4rr/x1m/ogz&srno=s_1_6&otracker=AS_QueryStore_OrganicAutoSuggest_2_11_na_na_na&otracker1=AS_QueryStore_OrganicAutoSuggest_2_11_na_na_na&fm=organic&iid=661a8748-42db-4926-9b01-fdf14e796eb1.GMCHN3VPFGG9NWCB.SEARCH&ppt=None&ppn=None&ssid=usszo6mx000000001783350362448&qH=bf6b5623d2e2dc39&ov_redirect=true&ov_redirect=true&_refId=&_appId=CL"
+      ]
+    },
+    {
+      "name": "Lenovo Legion Pro 5 RTX 5070 Ti FlipKart",
+      "url": "https://www.flipkart.com/lenovo-legion-pro-5-wqxga-oled-intel-core-ultra-9-275hx-32-gb-1-tb-ssd-windows-11-home-12-gb-graphics-nvidia-geforce-rtx-5070-ti-16iax10h-gaming-laptop/p/itmde4f9c636b66d?pid=COMHHDHYZZTRYPT9&marketplace=FLIPKART&lid=LSTCOMHHDHYZZTRYPT92YCDJD&fm=organic&pageUID=1783421567023"
     }
   ],
   "searches": [
@@ -22,17 +25,13 @@
       "url": "https://www.amazon.in/s?k=playstation+5+digital+edition+console",
       "must_include": ["digital"],
       "any_include": ["playstation", "ps5", "ps 5"],
-      "exclude": ["controller", "cover", "skin", "stand", "headset", "charging", "cooling", "card", "remote", "camera", "sticker", "grip", "case", "vr", "disc drive", "dock"],
-      "min_price": 30000,
-      "max_price": 70000
+      "exclude": ["controller", "cover", "skin", "stand", "headset", "charging", "cooling", "card", "remote", "camera", "sticker", "grip", "case", "vr", "disc drive", "dock"]
     },
     {
       "name": "PS5 Digital search (Flipkart)",
       "url": "https://www.flipkart.com/search?q=playstation%205%20digital%20console",
       "must_include": ["ps5", "digital"],
-      "exclude": ["controller", "cover", "skin", "stand", "headset", "charging", "cooling", "card", "remote", "camera", "sticker", "grip", "case", "vr", "disc drive", "dock"],
-      "min_price": 30000,
-      "max_price": 70000
+      "exclude": ["controller", "cover", "skin", "stand", "headset", "charging", "cooling", "card", "remote", "camera", "sticker", "grip", "case", "vr", "disc drive", "dock"]
     }
   ]
 }
