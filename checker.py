@@ -169,9 +169,11 @@ def check_amazon(html):
     return OUT_OF_STOCK, price
 
 
-def check_flipkart(html):
+def check_flipkart(html, pid=None):
     """Flipkart (fetched with a mobile UA) embeds its state as JSON in the
-    page: "availabilityStatus":"IN_STOCK" and "finalPrice":59900."""
+    page: "availabilityStatus":"IN_STOCK" and "finalPrice":59900.
+    Pages with several variants/sellers can carry multiple statuses, so
+    when the URL names a pid, use the status nearest that pid."""
     price = None
     m = re.search(r'"finalPrice"\s*:\s*(\d+)', html)
     if not m:
@@ -179,9 +181,26 @@ def check_flipkart(html):
     if m:
         price = float(m.group(1))
 
-    m = re.search(r'"availabilityStatus"\s*:\s*"(\w+)"', html)
-    if m:
-        return (IN_STOCK if m.group(1) == "IN_STOCK" else OUT_OF_STOCK), price
+    statuses = [
+        (s.start(), s.group(1))
+        for s in re.finditer(r'"availabilityStatus"\s*:\s*"(\w+)"', html)
+    ]
+    if statuses:
+        chosen = statuses[0][1]
+        if pid and len(statuses) > 1:
+            # pick the status physically closest to a mention of our pid
+            pid_positions = [p.start() for p in re.finditer(re.escape(pid), html)]
+            if pid_positions:
+                chosen = min(
+                    statuses,
+                    key=lambda st: min(abs(st[0] - p) for p in pid_positions),
+                )[1]
+        # if ANY status says in stock and the chosen one doesn't, trust
+        # in-stock — better a rare extra alert than a missed drop
+        if chosen != "IN_STOCK" and any(v == "IN_STOCK" for _, v in statuses):
+            print(f"  note: mixed statuses {[v for _, v in statuses]}, treating as IN_STOCK")
+            chosen = "IN_STOCK"
+        return (IN_STOCK if chosen == "IN_STOCK" else OUT_OF_STOCK), price
 
     # No product JSON found — either a bot wall or the page shape changed.
     # ("access denied" can appear inside Flipkart's JS bundles, so only
@@ -332,7 +351,9 @@ def check_product(product):
     if "flipkart.com" in url:
         # Flipkart only server-renders product data for mobile browsers
         html = fetch(url, headers=MOBILE_HEADERS)
-        return check_flipkart(html) if html else (BLOCKED, None)
+        pid_m = re.search(r"[?&]pid=(\w+)", url)
+        pid = pid_m.group(1) if pid_m else None
+        return check_flipkart(html, pid=pid) if html else (BLOCKED, None)
     print(f"  unsupported site: {url}")
     return ERROR, None
 
@@ -445,7 +466,33 @@ def check_one(name, url, state):
     time.sleep(3)  # be polite between requests
 
 
+def test_url(url):
+    """Diagnostic: python checker.py --test <url>
+    Shows exactly what the checker sees for one product page."""
+    print(f"Testing: {url[:100]}")
+    if "flipkart.com" in url:
+        html = fetch(url, headers=MOBILE_HEADERS)
+        if html is None:
+            print("RESULT: BLOCKED (could not fetch page)")
+            return
+        print(f"page size: {len(html)}")
+        statuses = re.findall(r'"availabilityStatus"\s*:\s*"(\w+)"', html)
+        print(f"availabilityStatus values found: {statuses}")
+        low = html.lower()
+        for marker in ("sold out", "notify me", "coming soon", "add to cart", "buy now"):
+            print(f"  '{marker}' occurrences: {low.count(marker)}")
+        pid_m = re.search(r"[?&]pid=(\w+)", url)
+        pid = pid_m.group(1) if pid_m else None
+        print(f"pid from url: {pid}")
+        print("RESULT:", check_flipkart(html, pid=pid))
+    else:
+        print("RESULT:", check_product({"url": url}))
+
+
 if __name__ == "__main__":
+    if "--test" in sys.argv:
+        test_url(sys.argv[-1])
+        sys.exit(0)
     if "--loop" in sys.argv:
         # Run forever, checking every 5 minutes (for phone/PC hosting).
         # Override with e.g. --loop 120 for every 2 minutes.
