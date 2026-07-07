@@ -3,10 +3,12 @@
 # Remove with:  .\uninstall_task.ps1
 
 $taskName = "PS5 Stock Checker"
-$scriptPath = Join-Path $PSScriptRoot "run_checker.ps1"
+$vbsPath = Join-Path $PSScriptRoot "run_hidden.vbs"
 
-$action = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
+# wscript + .vbs with window mode 0 = truly no window (PowerShell's own
+# -WindowStyle Hidden still creates a closable console box)
+$action = New-ScheduledTaskAction -Execute "wscript.exe" `
+    -Argument "`"$vbsPath`""
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 
