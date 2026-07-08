@@ -19,15 +19,15 @@
     {
       "name": "PS5 Digital search (Amazon)",
       "url": "https://www.amazon.in/s?k=playstation+5+digital+edition+console",
-      "must_include": ["digital"],
+      "must_include": ["digital", "console"],
       "any_include": ["playstation", "ps5", "ps 5"],
-      "exclude": ["controller", "cover", "skin", "stand", "headset", "charging", "cooling", "card", "remote", "camera", "sticker", "grip", "case", "vr", "disc drive", "dock"]
+      "exclude": ["controller", "cover", "skin", "stand", "headset", "charging", "cooling", "card", "remote", "camera", "sticker", "grip", "case", "vr", "disc", "disk", "drive", "dock", "portal", "ssd", "expansion"]
     },
     {
       "name": "PS5 Digital search (Flipkart)",
       "url": "https://www.flipkart.com/search?q=playstation%205%20digital%20console",
       "must_include": ["ps5", "digital"],
-      "exclude": ["controller", "cover", "skin", "stand", "headset", "charging", "cooling", "card", "remote", "camera", "sticker", "grip", "case", "vr", "disc drive", "dock"]
+      "exclude": ["controller", "cover", "skin", "stand", "headset", "charging", "cooling", "card", "remote", "camera", "sticker", "grip", "case", "vr", "disc", "disk", "drive", "dock", "portal", "ssd", "expansion"]
     }
   ]
 }
