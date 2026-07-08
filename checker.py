@@ -228,6 +228,65 @@ MOBILE_HEADERS = dict(
 
 # ------------------------------------------------------- search monitoring
 
+# Verification of candidate listings found via search: is it REALLY a
+# PS5 console (any variant: digital, disc, slim) and not an accessory?
+# Words that never appear in a console title but always in add-ons.
+# NOTE: "disc"/"disk" alone are allowed (Disc Edition consoles) — but
+# "drive" catches every "Disc Drive"/"Disk Drive" accessory spelling.
+CONSOLE_REJECT_WORDS = [
+    "controller", "dualsense", "cover", "skin", "stand", "headset",
+    "charging", "charger", "cooling", "camera", "remote", "sticker",
+    "grip", "case", "vr", "dock", "portal", "ssd", "expansion", "drive",
+    "cable", "faceplate", "plate", "holder", "mount", "adapter", "earbuds",
+]
+
+# Cheapest genuine PS5 console variant sells well above this; every
+# accessory (Disk Drive Ultra ~Rs 14,600, controllers, stands) is below it.
+VERIFY_MIN_PRICE = 25000
+
+
+def verify_console(url):
+    """Open a candidate listing and confirm it is an actual PS5 console.
+    Returns (verdict, reason, title, price):
+      True  -> verified orderable console, safe to alert
+      False -> definitely not a console (permanent, remember and skip)
+      None  -> can't tell yet (page blocked / not orderable) — retry later
+    """
+    if "flipkart.com" in url:
+        html = fetch(url, headers=MOBILE_HEADERS)
+        if html is None:
+            return None, "page blocked", None, None
+        status, price = check_flipkart(html)
+    else:
+        html = fetch(url)
+        if html is None:
+            return None, "page blocked", None, None
+        status, price = check_amazon(html)
+
+    soup = BeautifulSoup(html, "html.parser")
+    title = ""
+    el = soup.select_one("#productTitle") or soup.find("title")
+    if el:
+        title = el.get_text(" ", strip=True)
+    og = soup.find("meta", attrs={"property": "og:title"})
+    if og and og.get("content"):
+        title = og["content"]
+    low = title.lower()
+
+    if not any(k in low for k in ("playstation", "ps5", "ps 5")):
+        return False, f"no playstation keyword in title: '{title[:60]}'", title, price
+    bad = [w for w in CONSOLE_REJECT_WORDS if w in low]
+    if bad:
+        return False, f"accessory words in title: {bad}", title, price
+    if "console" not in low and not re.search(r"cfi[-\s]?\d{3}", low):
+        return False, "no console signal ('console' or CFI model code)", title, price
+    if price is not None and price < VERIFY_MIN_PRICE:
+        return False, f"price Rs{price:,.0f} below console floor", title, price
+    if status != IN_STOCK:
+        # A real console listing that isn't orderable yet: keep watching it
+        return None, "console but not orderable yet", title, price
+    return True, "verified", title, price
+
 def amazon_search_results(url):
     """Yield (item_id, title, price, link) for every result on an Amazon
     search page."""
@@ -332,15 +391,30 @@ def run_searches(searches, state):
             time.sleep(3)
             continue
 
+        # Second stage for anything new: open the product page itself and
+        # verify it's a genuine PS5 console (any variant) before alerting.
+        seen = set(prev_seen)
         new_ids = [i for i in matching if i not in prev_seen]
         for item_id in new_ids[:5]:
-            title, price, link = matching[item_id]
-            notify(
-                f"🆕 NEW ORDERABLE LISTING\n{title[:120]}\n₹{price:,.0f}\n"
-                f"Found via search: {name}",
-                order_url=link,
-            )
-        state[key] = {"seen": sorted(set(prev_seen) | set(matching))}
+            s_title, s_price, link = matching[item_id]
+            time.sleep(3)
+            verdict, reason, v_title, v_price = verify_console(link)
+            if verdict is None:
+                # blocked or not orderable yet — recheck next cycle
+                print(f"  candidate {item_id}: {reason} (will recheck)")
+                continue
+            seen.add(item_id)
+            if verdict:
+                shown = v_title or s_title
+                shown_price = v_price or s_price
+                notify(
+                    f"🆕 VERIFIED PS5 CONSOLE LISTING\n{shown[:120]}\n"
+                    f"₹{shown_price:,.0f}\nFound via search: {name}",
+                    order_url=link,
+                )
+            else:
+                print(f"  candidate {item_id} REJECTED: {reason}")
+        state[key] = {"seen": sorted(seen)}
         time.sleep(3)
 
 
